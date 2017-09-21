@@ -1,0 +1,7 @@
+通过 WebSphere MQ 遥测传输 (MQTT) 将 Android 手机引入物联网：
+https://www.ibm.com/developerworks/cn/websphere/library/techarticles/1109_wangb_mqandroid/1109_wangb_mqandroid.html#icomments 
+MQTT中文版：
+https://www.gitbook.com/book/mcxiaoke/mqtt-cn/details
+
+安卓手机可以使用myMQTT应用来调试
+ios可以使用MQTTT来进行调试

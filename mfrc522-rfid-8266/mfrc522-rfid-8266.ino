@@ -1,4 +1,5 @@
 
+
 /* ref: https://github.com/ParalelniPolis/rfid-locks
  *  
  *  RC522:
@@ -23,6 +24,10 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <Hash.h>
+#include <PubSubClient.h>
+#include <Servo.h> 
+Servo myservo;  // create servo object to control a servo 
+// twelve servo objects can be created on most boards
 
 #define DEBUG
 
@@ -35,12 +40,21 @@
 //WiFi
 const char* ssid = "maker";
 const char* password = "swjtumaker";
+const char* mqtt_server = "pitopia.cc";
+
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+long lastMsg = 0;
+char msg[50];
+int value = 0;
+String uid;
 
 #define PLACE "CUSTOM_LOCK_IDENTIFIER"
 
-const char* host = "api.example.com";
-const int httpsPort = 443;
-#define API "/lock.php?place="
+//const char* host = "api.example.com";
+//const int httpsPort = 443;
+//#define API "/lock.php?place="
 
 //SHA1 fingerprint of the certificate
 const char* fingerprint = "‎B4 79 37 7F 73 F8 38 B9 45 74 E2 FB 4B 02 F1 4B F6 AA 1D 11";
@@ -154,41 +168,93 @@ bool check_auth(byte *buffer, byte bufferSize) {
     PRINTDEBUG("UID is too short");
     return false;
   }
+}
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+
+  // Switch on the LED if an 1 was received as first character
+//  if ((char)payload[0] == '1') {
+//    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
+//      digitalWrite(redpin, HIGH);   // Turn the LED on (Note that LOW is the voltage level
+//     digitalWrite(greenpin, LOW);       
+//      digitalWrite(bluepin, LOW);    
+//    // but actually the LED is on; this is because
+//    // it is acive low on the ESP-01)
+//    sweep();
+//  } else {
+//    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
+//     digitalWrite(redpin, LOW);   // Turn the LED on (Note that LOW is the voltage level
+//     digitalWrite(greenpin, HIGH);       
+//      digitalWrite(bluepin, LOW);    
+//  }
+
+}
+
+
+//use mqtt
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    if (client.connect("ESP8266Client")) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      client.publish("outTopic", uid);    //this is topic
+      // ... and resubscribe
+      client.subscribe("inTopic");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+
   
   // Use WiFiClientSecure class to create TLS connection
-  WiFiClientSecure client;
-  PRINTDEBUG("Connecting to:");
-  PRINTDEBUG(host);
-  delay(10);
-  // Check connection
-  if(!client.connect(host, httpsPort))
-  {
-    PRINTDEBUG("Connection failed");
-    return false;
-  }
-
-  // Check fingerprint
-  if(client.verify(fingerprint, host))
-  {
-    PRINTDEBUG("Certificate matches");
-  }
-  else
-  {
-    PRINTDEBUG("Certificate does not match");
-    return false;
-  }
+//  WiFiClientSecure client;
+//  PRINTDEBUG("Connecting to:");
+//  PRINTDEBUG(host);
+//  delay(10);
+//  // Check connection
+//  if(!client.connect(host, httpsPort))
+//  {
+//    PRINTDEBUG("Connection failed");
+//    return false;
+//  }
+//
+//  // Check fingerprint
+//  if(client.verify(fingerprint, host))
+//  {
+//    PRINTDEBUG("Certificate matches");
+//  }
+//  else
+//  {
+//    PRINTDEBUG("Certificate does not match");
+//    return false;
+//  }
 
   // URL request
-  String url = String(API) + String(PLACE) + String("&key=") + uid_hash(buffer, bufferSize);
-  PRINTDEBUG("Requesting URL:");
-  PRINTDEBUG(url);
-
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-               "Host: " + host + "\r\n" +
-               "User-Agent: ESP8266Lock\r\n" +
-               "Connection: close\r\n\r\n");
-
-  PRINTDEBUG("Request sent");
+//  String url = String(API) + String(PLACE) + String("&key=") + uid_hash(buffer, bufferSize);
+//  PRINTDEBUG("Requesting URL:");
+//  PRINTDEBUG(url);
+//
+//  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+//               "Host: " + host + "\r\n" +
+//               "User-Agent: ESP8266Lock\r\n" +
+//               "Connection: close\r\n\r\n");
+//
+//  PRINTDEBUG("Request sent");
 
 //  Debugging - Read all the lines of the reply from server and print them to Serial
 //  PRINTDEBUG("Response:");
@@ -283,7 +349,10 @@ void setup() {
 ////////////////////////// LOOP //////////////////////////////////////////////////////
 void loop() {
   int connectFails = 0;
+  
+  
 
+  
   //WiFi check
   while(WiFi.status() != WL_CONNECTED)
   {
@@ -314,6 +383,7 @@ void loop() {
   #ifdef DEBUG
     dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
     delay(10);
+    uid =uid_string(mfrc522.uid.uidByte, mfrc522.uid.size); 
   #endif
   PRINTDEBUG();
   PRINTDEBUG("UID SHA1 Hash:");
@@ -336,6 +406,10 @@ void loop() {
     delay(2500);
     digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH        
   }
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
 }
 
 

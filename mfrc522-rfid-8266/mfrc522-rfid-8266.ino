@@ -25,6 +25,7 @@
 #include <WiFiClientSecure.h>
 #include <Hash.h>
 #include <PubSubClient.h>
+#include <Ethernet.h>
 #include <Servo.h> 
 Servo myservo;  // create servo object to control a servo 
 // twelve servo objects can be created on most boards
@@ -32,19 +33,27 @@ Servo myservo;  // create servo object to control a servo
 #define DEBUG
 
 #ifdef DEBUG
-  #define PRINTDEBUG(STR) Serial.println(STR)
+  #define PRINTDEBUG(STR) Serial.println(STR);
 #else
   #define PRINTDEBUG(STR) /*NOTHING*/
 #endif
 
+
+
+
+
 //WiFi
-const char* ssid = "maker";
-const char* password = "swjtumaker";
-const char* mqtt_server = "pitopia.cc";
+const char* ssid = "maker_pro";                    //wifi账号
+const char* password = "swjtumaker144";               //wifi密码
+const char* mqtt_server = "172.16.0.10";
+
+//MQTT
+EthernetClient ethClient;
+PubSubClient client(ethClient);
 
 
-WiFiClient espClient;
-PubSubClient client(espClient);
+//WiFiClient espClient;
+//PubSubClient client(espClient);
 long lastMsg = 0;
 char msg[50];
 int value = 0;
@@ -110,6 +119,16 @@ String uid_string(byte *buffer, byte bufferSize) {
 
   return uid;
 }
+
+//ID CHAR[]
+void id_char(byte *buffer, byte bufferSize){
+     
+      for (byte i = 0; i < bufferSize; ++i) {
+           id[i] = buffer[i];
+      }
+      
+  }
+
 
 
 // UID hashing
@@ -178,22 +197,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
 
-  // Switch on the LED if an 1 was received as first character
-//  if ((char)payload[0] == '1') {
-//    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
-//      digitalWrite(redpin, HIGH);   // Turn the LED on (Note that LOW is the voltage level
-//     digitalWrite(greenpin, LOW);       
-//      digitalWrite(bluepin, LOW);    
-//    // but actually the LED is on; this is because
-//    // it is acive low on the ESP-01)
-//    sweep();
-//  } else {
-//    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
-//     digitalWrite(redpin, LOW);   // Turn the LED on (Note that LOW is the voltage level
-//     digitalWrite(greenpin, HIGH);       
-//      digitalWrite(bluepin, LOW);    
-//  }
-
+ 
 }
 
 
@@ -203,12 +207,17 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect
-    if (client.connect("ESP8266Client")) {
+    if (client.connect("ESP8266Client"),"optional","optional") {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      client.publish("outTopic", uid);    //this is topic
+   
+   //change string uid to char[] char_uid
+   char char_uid[uid.length()+1];
+   uid.toCharArray(char_uid,uid.length()+1);
+   client.publish("presence",char_uid);
       // ... and resubscribe
-      client.subscribe("inTopic");
+      Serial.println("textpublish");
+     client.subscribe("presence");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -221,84 +230,6 @@ void reconnect() {
 
 
   
-  // Use WiFiClientSecure class to create TLS connection
-//  WiFiClientSecure client;
-//  PRINTDEBUG("Connecting to:");
-//  PRINTDEBUG(host);
-//  delay(10);
-//  // Check connection
-//  if(!client.connect(host, httpsPort))
-//  {
-//    PRINTDEBUG("Connection failed");
-//    return false;
-//  }
-//
-//  // Check fingerprint
-//  if(client.verify(fingerprint, host))
-//  {
-//    PRINTDEBUG("Certificate matches");
-//  }
-//  else
-//  {
-//    PRINTDEBUG("Certificate does not match");
-//    return false;
-//  }
-
-  // URL request
-//  String url = String(API) + String(PLACE) + String("&key=") + uid_hash(buffer, bufferSize);
-//  PRINTDEBUG("Requesting URL:");
-//  PRINTDEBUG(url);
-//
-//  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-//               "Host: " + host + "\r\n" +
-//               "User-Agent: ESP8266Lock\r\n" +
-//               "Connection: close\r\n\r\n");
-//
-//  PRINTDEBUG("Request sent");
-
-//  Debugging - Read all the lines of the reply from server and print them to Serial
-//  PRINTDEBUG("Response:");
-//  PRINTDEBUG("=========");
-//  while(client.connected()){
-//    String line = client.readStringUntil('\n');
-//    PRINTDEBUG(line);
-//  }
-//  return false;
-  
-  PRINTDEBUG("Headers:");
-  PRINTDEBUG("========");
-  while(client.connected())
-  {
-    String line = client.readStringUntil('\n');
-    PRINTDEBUG(line);
-    if(line == "\r")
-    {
-      PRINTDEBUG(line);
-      PRINTDEBUG("========");      
-      PRINTDEBUG("Headers received");
-      break;
-    }
-  }
-  
-  String line = client.readStringUntil('\n');
-
-  PRINTDEBUG("Reply was:");
-  PRINTDEBUG("==========");
-  PRINTDEBUG(line);
-  PRINTDEBUG("==========");
-  PRINTDEBUG("Closing connection");
-  
-  if(line == "{\"" + String(PLACE) + "\":true}")    //Check the server response
-  {
-    PRINTDEBUG("UID is authorized");
-    return true;
-  }
-  else
-  {
-    PRINTDEBUG("UID is not authorized");
-    return false;
-  }
-}
 
 
 ////////////////////////// SETUP //////////////////////////////////////////////////////
@@ -309,6 +240,11 @@ void setup() {
     Serial.setDebugOutput(true);
   #endif
   PRINTDEBUG();             // Break line after gibberish
+
+
+client.setServer("mqtt://172.16.0.10",1883);
+    // client is now ready for use
+client.setCallback(callback);
 
   configTime(1 * 3600, 1 * 3600, "pool.ntp.org", "time.nist.gov");
   delay(5000);
@@ -349,10 +285,7 @@ void setup() {
 ////////////////////////// LOOP //////////////////////////////////////////////////////
 void loop() {
   int connectFails = 0;
-  
-  
-
-  
+ 
   //WiFi check
   while(WiFi.status() != WL_CONNECTED)
   {
@@ -383,7 +316,8 @@ void loop() {
   #ifdef DEBUG
     dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
     delay(10);
-    uid =uid_string(mfrc522.uid.uidByte, mfrc522.uid.size); 
+    uid =uid_string(mfrc522.uid.uidByte, mfrc522.uid.size);
+     
   #endif
   PRINTDEBUG();
   PRINTDEBUG("UID SHA1 Hash:");
@@ -406,10 +340,12 @@ void loop() {
     delay(2500);
     digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH        
   }
+ 
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
+  
 }
 
 
